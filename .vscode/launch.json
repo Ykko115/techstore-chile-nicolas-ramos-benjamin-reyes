@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-MicroserviceApplication<techstore-api>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "cl.techstore.api.MicroserviceApplication",
+            "projectName": "techstore-api",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
