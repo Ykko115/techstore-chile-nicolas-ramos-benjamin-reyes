@@ -542,6 +542,11 @@ docker-compose ps
 
 # Ver logs de la base de datos
 docker-compose logs postgres
+
+# Si aparece: FATAL: password authentication failed for user "postgres"
+# recrear el volumen para aplicar las credenciales actuales
+docker-compose down -v
+docker-compose up --build
 ```
 
 ### Limpiar Docker
