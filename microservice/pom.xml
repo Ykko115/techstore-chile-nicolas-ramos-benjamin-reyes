@@ -87,6 +87,17 @@
                 <artifactId>postgresql</artifactId>
                 <scope>runtime</scope>
             </dependency>
+            <!-- AWS SDK v2 - Amazon SQS (auditoría asíncrona de inventario) -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>sqs</artifactId>
+                <version>2.25.60</version>
+            </dependency>
+            <!-- Jackson Databind (serialización del JSON de auditoría a SQS) -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+            </dependency>
         </dependencies>
 
 <build>

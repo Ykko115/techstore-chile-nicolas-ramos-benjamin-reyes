@@ -46,10 +46,10 @@ public class ProductoService {
     }
 
     // DELETE - borrado lógico
-    public void eliminar(Long id){
+    public Producto eliminar(Long id){
         Producto producto = productoRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
         producto.setActivo(false);
-        productoRepository.save(producto);
+        return productoRepository.save(producto);
     }
 }

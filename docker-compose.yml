@@ -23,6 +23,16 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/techstore
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      # Auditoría asíncrona (Amazon SQS). En local quedan vacías por defecto:
+      # el microservicio solo loguea una advertencia y omite el envío.
+      # Para probar contra la cola real de AWS Academy, exporta estas
+      # variables en tu shell (con las credenciales temporales del Learner Lab)
+      # antes de ejecutar "docker-compose up".
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      SQS_AUDIT_QUEUE_URL: ${SQS_AUDIT_QUEUE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     depends_on:
       - postgres
     restart: unless-stopped

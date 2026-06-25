@@ -46,6 +46,11 @@
 | **Docker** | Latest | Containerización |
 | **Docker Compose** | 1.29+ | Orquestación local |
 | **Lombok** | Latest | Boilerplate reduction |
+| **AWS SDK v2 (SQS)** | 2.25.x | Publicación asíncrona de eventos de auditoría |
+| **Amazon ECS Fargate** | - | Orquestación de contenedores en AWS |
+| **Amazon API Gateway** | - | Exposición pública y segura de la API |
+| **AWS Lambda** | - | Procesamiento serverless de auditoría |
+| **GitHub Actions** | - | CI/CD hacia AWS |
 
 ---
 
@@ -82,13 +87,17 @@ techstore-chile-nicolas-ramos-benjamin-reyes/
 │   │   │   └── ProductoController.java        # Endpoints de productos
 │   │   │
 │   │   ├── service/
-│   │   │   └── ProductoService.java           # Lógica de negocio
+│   │   │   ├── ProductoService.java           # Lógica de negocio
+│   │   │   └── AuditoriaPublisherService.java # Publica eventos de auditoría en SQS (async)
 │   │   │
 │   │   ├── repository/
 │   │   │   └── ProductoRepository.java        # Acceso a datos JPA
 │   │   │
 │   │   ├── model/
 │   │   │   └── Producto.java                  # Entity (id, nombre, descripción, precio, stock, categoría, activo)
+│   │   │
+│   │   ├── config/
+│   │   │   └── SqsConfig.java                 # Bean SqsClient + ObjectMapper, habilita @Async
 │   │   │
 │   │   ├── security/
 │   │   │   ├── JwtUtil.java                   # Generación y validación de JWT
@@ -105,10 +114,13 @@ techstore-chile-nicolas-ramos-benjamin-reyes/
 │   │
 │   ├── src/test/java/...                      # Tests unitarios
 │   │
-│   ├── Dockerfile                             # Build multi-stage
+│   ├── Dockerfile                             # Build multi-stage (JRE alpine, usuario no-root)
 │   ├── .dockerignore                          # Archivos a ignorar en Docker
 │   ├── pom.xml                                # Dependencias Maven
 │   └── DOCKER.md                              # Documentación de Docker
+│
+├── .github/workflows/
+│   └── deploy.yml                             # Pipeline CI/CD hacia ECR + ECS Fargate
 │
 ├── docker-compose.yml                         # Configuración de servicios
 ├── README.md                                  # Este archivo
@@ -480,6 +492,95 @@ spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=false
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQL15Dialect
 ```
+
+---
+
+## ☁️ Despliegue en AWS Academy (Evaluación 3)
+
+Esta sección documenta la migración del microservicio a una arquitectura nativa en AWS: contenedores en **ECS Fargate**, auditoría asíncrona de inventario vía **SQS + Lambda**, exposición segura con **API Gateway**, y despliegue automatizado con **GitHub Actions**.
+
+### Auditoría asíncrona de inventario
+
+Cada operación de escritura (`POST`, `PUT`, `DELETE`) en `/api/productos` publica, de forma asíncrona (`@Async`), un evento JSON a la cola SQS `techstore-audit-queue`:
+
+```json
+{
+  "accion": "CREAR / MODIFICAR / ELIMINAR",
+  "productoId": 12,
+  "nombre": "Monitor LG 4K",
+  "usuario": "admin@techstore.cl",
+  "fecha": "2026-06-24T14:43:00.123Z"
+}
+```
+
+El campo `usuario` se obtiene del contexto de seguridad (`SecurityContextHolder`), es decir, del nombre de usuario validado por el `JwtFilter` a partir del token JWT.
+
+#### Variables de entorno
+
+| Variable | Descripción | Valor en AWS Academy |
+|----------|-------------|----------------------|
+| `AWS_REGION` | Región de AWS donde se crean los recursos | la región de tu Learner Lab (ej. `us-east-1`) |
+| `SQS_AUDIT_QUEUE_URL` | URL completa de la cola `techstore-audit-queue` | la entregada por la consola SQS al crear la cola |
+
+Se inyectan en la **Task Definition de ECS** (sección *Environment variables* del contenedor). El microservicio **no** requiere `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` explícitos: el SDK (`DefaultCredentialsProvider`) toma automáticamente las credenciales temporales del rol `LabRole` asociado a la tarea ECS.
+
+Si `SQS_AUDIT_QUEUE_URL` no está configurada (por ejemplo, en ejecución local con `docker-compose`), el microservicio registra una advertencia en el log y omite el envío, sin afectar la respuesta HTTP al cliente.
+
+### Escalabilidad y monitoreo: ECS Fargate vs. entorno local (Actividad 1.4)
+
+| Aspecto | Docker Compose (local) | ECS Fargate (AWS) |
+|---|---|---|
+| **Réplicas** | Una sola instancia fija; escalar exige `docker-compose up --scale` manual, sin balanceo real entre réplicas. | El **ECS Service** mantiene el *desired count* de tareas y las repone automáticamente si fallan. Con **Service Auto Scaling** (target tracking, ej. CPU > 60%) se agregan o quitan tareas en caliente, sin downtime. |
+| **Balanceo de carga** | No existe; un único contenedor recibe todo el tráfico del puerto publicado. | El **Application Load Balancer (ALB)** distribuye el tráfico entre todas las tareas Fargate "healthy" del Target Group, y deja de enviarles tráfico si fallan los health checks. |
+| **Reinicio ante fallos** | `restart: unless-stopped` reinicia el contenedor en el mismo host Docker; si el host muere, el servicio cae. | ECS supervisa cada tarea (`RUNNING`/`STOPPED`) y lanza una nueva automáticamente ante una falla, sin depender de un host único (Fargate administra el cómputo subyacente). |
+| **Límites de CPU/Memoria** | Limitados solo por los recursos del host/Docker Desktop, sin cuotas explícitas a menos que se configuren manualmente. | Definidos explícitamente en la Task Definition: **0.25 vCPU / 0.5 GB RAM** por tarea, reservados de forma exclusiva por Fargate. |
+| **Despliegue de nuevas versiones** | Manual: `docker-compose up --build` detiene y reconstruye el contenedor (con downtime). | *Rolling deployment*: ECS levanta tareas nuevas, espera que pasen el health check del ALB y solo entonces retira las antiguas (sin downtime perceptible). |
+
+### Checklist paso a paso en la consola de AWS
+
+> Todo se realiza dentro del **Learner Lab** de AWS Academy (botón *Start Lab*), usando siempre el rol preconfigurado **`LabRole`** donde se solicite un rol de IAM (no se pueden crear roles propios).
+
+1. **Amazon ECR**
+   - Crear repositorio privado `techstore-api`.
+   - `aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <ecr_url>`
+   - `docker build -t techstore-api ./microservice && docker tag techstore-api:latest <ecr_url>/techstore-api:latest && docker push <ecr_url>/techstore-api:latest`
+
+2. **Amazon SQS**
+   - Crear cola estándar `techstore-audit-queue` y copiar su URL (será `SQS_AUDIT_QUEUE_URL`).
+
+3. **AWS Lambda**
+   - Crear función `techstore-audit-logger` (Node.js o Python) con el código de [`techstore-cloud-support/notification-function/`](../techstore-cloud-support/notification-function/).
+   - Rol de ejecución: **Use an existing role → LabRole**.
+   - Agregar trigger de SQS apuntando a `techstore-audit-queue`.
+
+4. **Amazon ECS (Fargate)**
+   - Crear Cluster (tipo Fargate).
+   - Crear Task Definition: imagen de ECR, **0.25 vCPU / 0.5 GB RAM**, Task Role = Task Execution Role = `LabRole`, variables de entorno (`AWS_REGION`, `SQS_AUDIT_QUEUE_URL`, datasource de RDS/OCI).
+   - Crear Service asociado a un **Application Load Balancer** público (Target Group → puerto 8080).
+   - Configurar **Service Auto Scaling** (target tracking de CPU, ej. min 1 / max 3 tareas).
+
+5. **Security Groups**
+   - SG de las tareas ECS: permitir entrada **solo** desde el SG del ALB (puerto 8080); bloquear acceso público directo.
+   - SG del ALB: permitir entrada pública en el puerto 80/443.
+
+6. **Amazon API Gateway**
+   - Crear API HTTP (o REST) con una ruta proxy (`/{proxy+}`) que apunte al DNS del ALB.
+   - Probar con **Postman**: header `Authorization: Bearer <token>` contra la URL pública del API Gateway.
+
+7. **GitHub Actions**
+   - En el repositorio: *Settings → Secrets and variables → Actions* → crear `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` con los valores de "AWS Details → AWS CLI" del Learner Lab.
+   - Ajustar en [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) los valores de `ECR_REPOSITORY`, `ECS_CLUSTER` y `ECS_SERVICE` si difieren de los nombres reales usados en tu cuenta.
+   - Cada `push` a `main` compila con Maven, reconstruye la imagen, la sube a ECR y fuerza un nuevo despliegue del servicio ECS.
+   - **Importante:** las credenciales del Learner Lab expiran cada pocas horas — debes actualizar los 3 secretos cada vez que reinicies el laboratorio.
+
+8. **Validación E2E**
+   - Login (`POST /auth/login`) → token JWT.
+   - CRUD de productos vía API Gateway con el token.
+   - Revisar **CloudWatch Logs** del grupo de log de `techstore-audit-logger` para confirmar el procesamiento del evento SQS.
+   - Revisar el estado de las tareas en el Cluster ECS (pestaña *Tasks* / *Service*).
+
+9. **Video demostrativo (Actividad 5)**
+   - Grabar 3-8 min mostrando: login + CRUD vía Postman contra el API Gateway, el mensaje llegando a SQS, el log en CloudWatch de la Lambda, las tareas activas en ECS Fargate, y un `push` a `main` completando el pipeline en GitHub Actions.
 
 ---
 
