@@ -9,7 +9,7 @@ env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: techstore-api
   ECS_CLUSTER: techstore-cluster
-  ECS_SERVICE: techstore-api-service-1
+  ECS_SERVICE: techstore-api-task-service-1
 
 jobs:
   build-and-deploy:
