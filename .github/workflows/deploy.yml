@@ -2,7 +2,8 @@ name: Deploy TechStore API a AWS ECS Fargate
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "deploy"]
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
@@ -46,7 +47,10 @@ jobs:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/techstore
           SPRING_DATASOURCE_USERNAME: postgres
           SPRING_DATASOURCE_PASSWORD: postgres
-        run: mvn -B clean test
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_SESSION_TOKEN: test
+        run: ./mvnw -B clean test
 
       - name: Configurar credenciales temporales de AWS Academy
         uses: aws-actions/configure-aws-credentials@v4
