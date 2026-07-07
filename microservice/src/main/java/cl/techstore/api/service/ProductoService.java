@@ -17,7 +17,7 @@ public class ProductoService {
 
     // GET - listar todos
     public List<Producto> listarTodos(){
-        return productoRepository.findAll();
+        return productoRepository.findByActivoTrue();
     }
 
     // POST - crear
