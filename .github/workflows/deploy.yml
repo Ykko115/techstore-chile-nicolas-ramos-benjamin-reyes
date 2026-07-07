@@ -7,9 +7,9 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: techstore-api
-  ECS_CLUSTER: techstore-cluster
-  ECS_SERVICE: techstore-api-task-service-1
+  ECR_REPOSITORY: devops-eft/backend
+  ECS_CLUSTER: backend-cluster
+  ECS_SERVICE: eft-backend-svc
 
 jobs:
   build-and-deploy:
