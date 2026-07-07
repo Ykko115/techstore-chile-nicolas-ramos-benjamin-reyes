@@ -44,9 +44,7 @@ jobs:
       - name: Compilar y ejecutar tests (Maven)
         working-directory: ./microservice
         env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/techstore
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
+          SPRING_PROFILES_ACTIVE: test
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
           AWS_SESSION_TOKEN: test
